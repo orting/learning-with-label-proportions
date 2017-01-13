@@ -10,7 +10,7 @@ struct ScalarRisk {
   typedef Eigen::Matrix< double,
 			 Eigen::Dynamic,
 			 1,
-			 Eigen::RowMajor > KnownLabelVectorType;
+			 Eigen::ColMajor > KnownLabelVectorType;
 
   typedef Eigen::Matrix< double,
 			 Eigen::Dynamic,

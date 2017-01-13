@@ -3,7 +3,7 @@
 
 struct L1_ScalarLoss {
   double operator()( double t, double y ) {
-  return t < y ? return y - t : return t - y;
+  return t < y ?  y - t :  t - y;
   }
 };
 
