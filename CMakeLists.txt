@@ -6,6 +6,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GCC_FLAGS} -std=c++11 -DHAVE_GLOG" CAC
 
 project( learning-with-label-proportions )
 
+add_definitions(-DLLP_VERSION="1")
+
 option( BUILD_TOOLS "Build tools" OFF )
 option( BUILD_TESTING "Build tests" ON )
 
