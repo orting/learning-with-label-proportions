@@ -3,7 +3,7 @@
 
 #include "libcmaes/cmaes.h"
 
-#include "llp/Models/CMSModel.h"
+#include "llp/Models/ClusterModel.h"
 #include "llp/Algorithms/Trainers/CMSTrainerParameters.h"
 #include "bd/BaggedDataset.h"
 
@@ -11,13 +11,13 @@
 
 /**
 
-   TWeightedDistanceInstanceClusterer should define the types
+   TInstanceClusterer should define the types
      ParameterType
      DistanceType
      InstanceClusteringType
    and the methods
      TClusterer( ParameterType& )
-     InstanceClusteringType Cluster( BaggedDataset&, const double*, int )
+     InstanceClusteringType Cluster( BaggedDataset&, const DistanceType& )
      
    TLabeler should define the types
      ParameterType
@@ -28,11 +28,11 @@
    TTracer should define the types
      ParameterType
    and the methods
-     TTracer( ParameterType& )
-     void Trace( const InstanceClustering&, const VectorType&, double )
+     TTracer( const ParameterType& )
+     void Trace( double )
 */
 template< typename TBaggedDataset,
-	  typename TWeightedDistanceInstanceClusterer,
+	  typename TInstanceClusterer,
 	  typename TClusterLabeler,
 	  typename TTracer >
 class CMSTrainer {
@@ -40,16 +40,18 @@ public:
   typedef TBaggedDataset BaggedDatasetType;
   typedef typename BaggedDatasetType::InstanceLabelVectorType ClusterLabelVectorType; 
   
-  typedef TWeightedDistanceInstanceClusterer ClustererType;
-  typedef TClusterLabeler                    LabelerType;
-  typedef TTracer                            TracerType;
+  typedef TInstanceClusterer ClustererType;
+  typedef TClusterLabeler    LabelerType;
+  typedef TTracer            TracerType;
   
   typedef CMSTrainer< BaggedDatasetType, ClustererType, LabelerType, TracerType > Self;
 
   typedef typename ClustererType::InstanceClusteringType InstanceClusteringType;
-  typedef CMSModel< typename ClustererType::DistanceType, BaggedDatasetType > ModelType;
+  typedef typename ClustererType::DistanceType DistanceType;
+  typedef ClusterModel< DistanceType, BaggedDatasetType > ModelType;
+  typedef typename ModelType::MatrixType MatrixType;
 
-  typedef CMSTrainerParameters                  CMSTrainerParameterType;
+  typedef CMSTrainerParameters                  ParameterType;
   typedef typename ClustererType::ParameterType ClustererParameterType;
   typedef typename LabelerType::ParameterType   LabelerParameterType;
   typedef typename TracerType::ParameterType    TracerParameterType;
@@ -58,41 +60,56 @@ public:
   typedef libcmaes::CMAParameters< GenoPheno > CMAParameters;
   typedef libcmaes::CMASolutions CMASolutions;  
 
-  CMSTrainer( CMSTrainerParameterType& trainerParams   = CMSTrainerParameterType(),
-	      ClustererParameterType&  clustererParams = ClustererParameterType(),
-	      LabelerParameterType&    labelerParams   = LabelerParameterType(),
-	      TracerParameterType&     tracerParams    = TracerParameterType() )
-    : m_TrainerParams( trainerParams )
+  CMSTrainer( const ParameterType&          trainerParams   = ParameterType(),
+	      const ClustererParameterType& clustererParams = ClustererParameterType(),
+	      const LabelerParameterType&   labelerParams   = LabelerParameterType(),
+	      const TracerParameterType&    tracerParams    = TracerParameterType() )
+    : m_Params( trainerParams )
     , m_ClustererParams( clustererParams )
     , m_LabelerParams( labelerParams )
     , m_TracerParams( tracerParams )
+    , m_TrainError( std::numeric_limits<double>::infinity() )
   {}
 
   ~CMSTrainer(){}
+
+  double TrainError() const {
+    return m_TrainError;
+  }
   
   /**
-     \brief Train cluster model
-     
-     \param model  The model to train
-     \patam bags   Training data as a collection of bags
+     \brief Train cluster model         
+     \param bags   Training data as a collection of bags
+     \param dim    The dimension of the feature space. If this is not equal to 
+                   the dimension of bags, then it is assumed that the bags lie 
+		   in a an dim x (bags.Dimension()/dim) dimensional feature space
   */
-  void Train( ModelType& model, BaggedDatasetType& bags ) {
+  typename ModelType::Pointer
+  Train( BaggedDatasetType& bags, const size_t dim ) {
     // We are searhing for feature weights in [0,1] and we start at the center.
     // It is recomended that sigma is set so the optimal solution is within
-    // [0.5 - sigma, 0.5 + sigma]. 
-    const auto dim = model.Dimension();
-    model.Weights() = std::vector< double >( dim, 0.5 );
+    // [0.5 - sigma, 0.5 + sigma].
+    std::vector< double > weights( dim, 0.5 );
     
     std::vector< double > lbounds( dim, 0.0 );
     std::vector< double > ubounds( dim, 1.0 );
     GenoPheno gp( &lbounds.front(), &ubounds.front(), dim );
-    CMAParameters cmaParams( dim,
-			     model.Weights().data(),
-			     m_TrainerParams.sigma,
-			     m_TrainerParams.lambda,
-			     m_TrainerParams.seed,
+    CMAParameters cmaParams( weights.size(),
+			     weights.data(),
+			     m_Params.sigma,
+			     m_Params.lambda,
+			     m_Params.seed,
 			     gp );
     cmaParams.set_algo( aCMAES );
+
+    if ( m_Params.maxIterations > 0 ) {
+      cmaParams.set_max_iter( m_Params.maxIterations );
+    }
+
+    if ( !m_Params.out.empty() ) {
+      cmaParams.set_fplot( m_Params.out );
+    }
+
 
     ClustererType clusterer( m_ClustererParams );
     LabelerType   labeler( m_LabelerParams );
@@ -104,15 +121,16 @@ public:
       [&bags, &clusterer, &labeler, &tracer]
       ( const double* w, const int& N )
       {
-	InstanceClusteringType clustering = clusterer.Cluster( bags, w, N );
+	DistanceType dist(w, N);
+	InstanceClusteringType clustering = clusterer.Cluster( bags, dist );
 	
 	// In some cases we have a clustering algorithm that is not guaranteed to
 	// give us the requested number of clusters, so we need to check how many
 	// we actually got
-	ClusterLabelVectorType labels = ClusterLabelVectorType::Zero( clustering.K() );
+	ClusterLabelVectorType labels = ClusterLabelVectorType::Zero( clustering.NumberOfClusters() );
 	double risk = labeler.Label( bags, clustering.clusterBagMap, labels );
 	
-	tracer.Trace( clustering, labels, risk );
+	tracer.Trace("Risk", risk );
 	return risk;
       };
   
@@ -121,56 +139,52 @@ public:
 
     // TODO: Handle the diferent ways that CMAES can terminate
     if ( solutions.run_status() < 0 ) {
-      std::cerr << "Error occured while training model." << std::endl
-		<< "CMA-ES error code: " << solutions.run_status() << std::endl;
-      return std::numeric_limits<double>::infinity();
+      tracer.Error("Error occured while training model. CMA-ES error code",
+		   solutions.run_status());
+      return ModelType::New();
+		       
     }
 
     // Now we use the weights we found in the optimization to train a model and
     // iterate a couple of times to give an idea of how stable the clustering is
-    model.Weights() = gp.pheno( solutions.best_candidate().get_x_dvec() );
+    auto eigWeights = gp.pheno( solutions.best_candidate().get_x_dvec() );
+    for ( size_t i = 0; i < weights.size(); ++i ) {
+      weights[i] = eigWeights(i);
+    }
 
-    std::cout << "Used " << solutions.niter() << " iterations" << std::endl
-	      << " == Weights ==" << std::endl << model.Weights() << std::endl;
+    tracer.Info("Iterations", std::to_string(solutions.niter()));
+    tracer.Info("Weights", eigWeights);
  
-    double bestRisk = std::numeric_limits<double>::infinity();  
-    for ( int i = 0; i < m_TrainerParams.finalNumberOfClusterings; ++i ) {
-      InstanceClusteringType clustering = clusterer.Cluster( bags, model.Weights().data(), model.Weights().size() );
-      ClusterLabelVectorType labels = ClusterLabelVectorType::Zero( clustering.K() );
+    double bestRisk = std::numeric_limits<double>::infinity();
+    MatrixType bestCentroids;
+    ClusterLabelVectorType bestLabels;
+    DistanceType dist(weights.data(), weights.size());
+    for ( size_t i = 0; i < m_Params.finalNumberOfClusterings; ++i ) {
+      InstanceClusteringType clustering = clusterer.Cluster( bags, dist );
+      ClusterLabelVectorType labels = ClusterLabelVectorType::Zero( clustering.NumberOfClusters() );
       double risk = labeler.Label( bags, clustering.clusterBagMap, labels );
 
-      std::cout << risk << std::endl;
+      tracer.Debug("Risk", risk);
 
       if ( risk < bestRisk ) {
 	bestRisk = risk;
-	model.Centroids() = clustering.centroids;
-	model.Labels( ) = labels;
+	bestCentroids = clustering.centroids;
+	bestLabels = labels;
       }
     }
 
-    if ( !m_TrainerParams.out.empty() ) {
-      std::string modelFile = m_TrainerParams.out + ".model";
-      std::ofstream o( modelFile );
-      if ( o.good() ) {
-	o << model;
-      }
-      else {
-	std::cerr << "Error writing model to " << modelFile << std::endl;
-      }
-    }
-  
-    model.Build();
-  
-    return bestRisk;
+    m_TrainError = bestRisk;
+    typename ModelType::Pointer model = ModelType::New( bestCentroids, bestLabels, weights );
+    model->Build();
+    return model;
   }
-
-  
  
 protected:
-  CMSTrainerParameterType m_TrainerParams;
+  ParameterType           m_Params;
   ClustererParameterType  m_ClustererParams;
   LabelerParameterType    m_LabelerParams;
-  TracerParameterType     m_TracerParams;  
+  TracerParameterType     m_TracerParams;
+  double                  m_TrainError;
 };
 
 

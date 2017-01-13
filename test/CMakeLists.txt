@@ -5,6 +5,7 @@ set( LIBS
   gtest
   gtest_main
   pthread
+  ${CMAES_LIBRARIES}
   )
 
 set( progs
