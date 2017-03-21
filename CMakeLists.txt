@@ -14,6 +14,9 @@ option( BUILD_TESTING "Build tests" ON )
 find_package(Eigen3 REQUIRED)
 include_directories( SYSTEM ${EIGEN3_INCLUDE_DIR} )
 
+find_package( Ceres REQUIRED PATHS "/home/silas/local/lib/cmake/Ceres" )
+include_directories( ${CERES_INCLUDE_DIRS} )
+
 # Help cmake find itk
 #find_package( Ceres REQUIRED PATHS "External/" )
 #include_directories( ${CERES_INCLUDE_DIRS} )
