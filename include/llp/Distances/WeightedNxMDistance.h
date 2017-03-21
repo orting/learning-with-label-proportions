@@ -33,6 +33,8 @@ struct WeightedNxMDistance {
     ResultType distance = ResultType();
     for ( size_t i = 0; i < m_N; ++i ) {
       distance += m_W[i] * d(a, b, M);
+      std::advance(a,M);
+      std::advance(b,M);
     }
     return distance;
   }

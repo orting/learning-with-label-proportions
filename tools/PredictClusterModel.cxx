@@ -65,18 +65,38 @@ int main(int argc, char *argv[]) {
   const std::string outputPath{ outputArg.getValue() };  
   //// Commandline parsing is done ////
   
-  const int BagLabelDim = 1;
+#ifdef USE_INTERVAL_LABELS
+  const size_t BagLabelDim = 2;
+#else
+  const size_t BagLabelDim = 1;
+#endif
   const int InstanceLabelDim = 1;
   typedef BaggedDataset<BagLabelDim, InstanceLabelDim> BaggedDatasetType;
   typedef WeightedNxMDistance< EarthMoversDistance > DistanceType;
   typedef ClusterModel< DistanceType, BaggedDatasetType > ModelType;
   
-  BaggedDatasetType bags = BaggedDatasetType::LoadText( baggedDatasetPath, true );
-  ModelType::Pointer model = ModelType::Load( modelPath );
+  std::ifstream baggedDatasetIs( baggedDatasetPath );
+  BaggedDatasetType bags = BaggedDatasetType::LoadText( baggedDatasetIs, true );
+
+  std::ifstream modelIs( modelPath );
+  ModelType::Pointer model = ModelType::Load( modelIs );
   model->Predict(bags);
 
   std::ofstream os(outputPath);
-  os << bags.InstanceLabels();
+  os << "bag,label,prediction" << std::endl;
+  const auto& bagId = bags.Indices();
+  const auto& bagLabel = bags.BagLabels();
+  const auto& instanceLabel = bags.InstanceLabels();
+
+  for ( size_t i = 0; i < bagId.size(); ++i ) {
+    double meanBagLabel = 0;
+    for ( size_t j = 0; j < BagLabelDim; ++j ) {
+      meanBagLabel += bagLabel(bagId[i],j);
+    }
+    meanBagLabel /= BagLabelDim;
+    os << (1+bagId[i]) << ',' << meanBagLabel << ',' << instanceLabel[i] << std::endl;
+  }
+  
   
   return EXIT_SUCCESS;
 }

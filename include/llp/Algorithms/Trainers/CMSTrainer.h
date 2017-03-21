@@ -122,7 +122,11 @@ public:
       ( const double* w, const int& N )
       {
 	DistanceType dist(w, N);
+	for ( int i = 0; i < N; ++i ) {
+	  tracer.Trace("Weight " + std::to_string(i), w[i]);
+	}
 	InstanceClusteringType clustering = clusterer.Cluster( bags, dist );
+	tracer.Trace("ClusterBagMap", clustering.clusterBagMap );
 	
 	// In some cases we have a clustering algorithm that is not guaranteed to
 	// give us the requested number of clusters, so we need to check how many
@@ -134,6 +138,8 @@ public:
 	return risk;
       };
   
+    tracer.Info("Status", "Running CMA-ES");
+
     // Run the optimization
     CMASolutions solutions = libcmaes::cmaes< GenoPheno >( objective, cmaParams );
 

@@ -5,7 +5,7 @@ set( LIBS
   gtest
   gtest_main
   pthread
-  ${CMAES_LIBRARIES}
+  cmaes
   )
 
 set( progs
@@ -18,6 +18,7 @@ set( progs
   IntervalRiskTest
   KMeansWeightedDistanceInstanceClustererTest
   RandomMatrixTest
+  WeightedNxMDistanceTest
   )
 
 foreach( prog ${progs} )
