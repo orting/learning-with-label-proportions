@@ -1,5 +1,5 @@
-#ifndef __GreedyBinaryClusterLabeller_h
-#define __GreedyBinaryClusterLabeller_h
+#ifndef __GreedyBinaryClusterLabeler_h
+#define __GreedyBinaryClusterLabeler_h
 
 #include <unordered_set>
 
@@ -34,7 +34,7 @@ class GreedyBinaryClusterLabeler
 {
 public:
   typedef TRisk RiskType;
-  typedef GreedyBinaryClusterLabeler< RiskType > Self;
+  typedef GreedyBinaryClusterLabeler< RiskType, BagLabelDim > Self;
 
   typedef BaggedDataset< BagLabelDim, 1 > BaggedDatasetType;
   
