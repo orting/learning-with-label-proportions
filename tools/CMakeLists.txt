@@ -1,9 +1,11 @@
 set( LIBS
   cmaes
+  ${CERES_LIBRARIES}
   )
 
 set( progs
   TrainClusterModel
+  TrainClusterModelContinuous
   PredictClusterModel
 )
 
