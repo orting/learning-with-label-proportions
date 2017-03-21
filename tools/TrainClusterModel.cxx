@@ -17,6 +17,8 @@
 #include "Distances/WeightedNxMDistance.h"
 #include "Losses/ScalarLosses.h"
 #include "Losses/ScalarRisk.h"
+#include "Losses/IntervalLosses.h"
+#include "Losses/IntervalRisk.h"
 #include "Tracers/FileTracer.h"
 #include "Tracers/StdOutTracer.h"
 
@@ -109,8 +111,13 @@ int main(int argc, char *argv[]) {
   //// Commandline parsing is done ////
   
   /* const size_t InstanceLabelDim = 1; */
+#ifdef USE_INTERVAL_LABELS
+  const size_t BagLabelDim = 2;
+  typedef IntervalRisk< L1_IntervalLoss > RiskType;
+#else
   const size_t BagLabelDim = 1;
-  typedef ScalarRisk< L2_ScalarLoss > RiskType;
+  typedef ScalarRisk< L1_ScalarLoss > RiskType;
+#endif
   typedef GreedyBinaryClusterLabeler< RiskType, BagLabelDim > LabelerType;
   typedef typename LabelerType::ParameterType LabelerParameterType;
 
@@ -127,12 +134,13 @@ int main(int argc, char *argv[]) {
   typedef CMSTrainer<BaggedDatasetType, ClustererType, LabelerType, TracerType> TrainerType;
   typedef typename TrainerType::ParameterType TrainerParameterType;
   typedef typename TrainerType::ModelType ModelType;  
-    
-  BaggedDatasetType bags = BaggedDatasetType::LoadText( baggedDatasetPath, true );
+
+  std::ifstream baggedDatasetIs( baggedDatasetPath );    
+  BaggedDatasetType bags = BaggedDatasetType::LoadText( baggedDatasetIs, true );
 
   ClustererParameterType clustererParams(k, branching, kMeansIterations);
   LabelerParameterType labelerParams;
-  TracerParameterType tracerParams(TracerType::Level::DEBUG, outputPath + ".cms.trace");  
+  TracerParameterType tracerParams(TracerType::Level::INFO, outputPath + ".cms.trace");  
 
   std::string cmaTrace(outputPath + ".cma.trace");
   TrainerParameterType trainerParams(
